@@ -56,7 +56,7 @@ project-root/
 │
 ├── tg_bot/                  # Telegram-бот на aiogram
 │   ├── __init__.py
-│   ├── bot.py               # Запуск бота
+│   ├── main.py              # Запуск бота
 │   ├── handlers.py          # FSM-хендлеры: /start, /ingest, /summarize, /ask
 │   ├── keyboards.py         # Клавиатура с командами
 │   ├── states.py            # Состояния FSM
