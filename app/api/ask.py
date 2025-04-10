@@ -23,42 +23,6 @@ def trim_response(raw: str) -> str:
     return raw.strip()
 
 
-# @router.post("/")
-# def ask_question(req: AskRequest, request: Request):
-#     """
-#     Получает ответ на вопрос по загруженной статье с использованием rerank и LLM.
-
-#     args:
-#         req (AskRequest): Вопрос и ID статьи
-#         request (Request): Объект запроса (для доступа к app.state)
-
-#     returns:
-#         dict: Ответ модели
-#     """
-#     embedding_model = request.app.state.embedding_model
-#     reranker = request.app.state.reranker
-#     vectordb = Chroma(persist_directory="chroma_storage", embedding_function=embedding_model)
-
-#     reranked = retrieve_and_rerank(req.question, vectordb, reranker, top_k=10, top_n=2)
-#     context = "\n\n".join([doc.page_content for doc, _ in reranked])
-
-#     prompt = f"""Ты — помощник по научным статьям. Твоя задача — дать короткий, точный и однозначный ответ на вопрос, используя только приведённый контекст. Нельзя продолжать диалог, нельзя задавать встречные вопросы, нельзя повторяться. Ответ должен быть строго завершён после одного абзаца.
-
-#     Вопрос:
-#     {req.question}
-    
-#     Контекст:
-#     {context}
-    
-#     Ответ:"""
-
-#     llm = request.app.state.llm
-#     response = llm(prompt, max_new_tokens=256, do_sample=False)[0]['generated_text']
-#     raw = response[len(prompt):].strip()
-#     answer = trim_response(raw)
-#     return {"answer": answer}
-
-
 @router.post("/")
 def question_answer(request: Request, req: QARequest):
     """
