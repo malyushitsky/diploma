@@ -30,7 +30,9 @@ async def lifespan(app: FastAPI):
 
     # Chroma
     app.state.vectorstore = Chroma(persist_directory="chroma_storage", embedding_function=app.state.embedding_model)
+
     yield
+
 
 
 app = FastAPI(title="arXiv RAG API", lifespan=lifespan)

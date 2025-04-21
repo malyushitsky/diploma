@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
+from sqlalchemy.orm import Session
 from app.models.schemas import QARequest
-from app.services.user_sessions import get_user_article
 from app.services.vectorstore import retrieve_and_rerank
+from app.db.crud import get_user_arxiv_id
+from app.db.database import get_db
 
 router = APIRouter()
 
 def trim_response(raw: str) -> str:
     """
-    Обрезаем вывод модели
+    Обрезает вывод модели
     
     """
     if "\n\n" in raw:
@@ -22,15 +24,19 @@ def trim_response(raw: str) -> str:
             return raw.split(phrase)[0].strip()
     return raw.strip()
 
-
 @router.post("/")
-def question_answer(request: Request, req: QARequest):
+def question_answer(
+    request: Request,
+    req: QARequest,
+    db: Session = Depends(get_db)
+):
     """
     Задаёт вопрос по статье, привязанной к Telegram-пользователю. Требует, чтобы ранее была вызвана /ingest.
 
     args:
         request (Request): FastAPI Request с доступом к векторной БД
         req (QARequest): запрос с user_id и вопросом
+        db (Session): сессия БД через Depends
 
     returns:
         dict: ответ, релевантные документы, найденный arxiv_id
@@ -38,9 +44,9 @@ def question_answer(request: Request, req: QARequest):
     user_id = req.user_id
     question = req.question
 
-    arxiv_id = get_user_article(user_id)
+    arxiv_id = get_user_arxiv_id(db, user_id)
     if not arxiv_id:
-        return {"error": "Для этого пользователя ещё не была загружена статья. Сначала вызовите /ingest."}
+        return {"error": "Вы еще не загрузили статью. Сначала загрузите ее, а потом задавайте вопросы по ней!"}
 
     vectordb = request.app.state.vectorstore
     reranker = request.app.state.reranker
@@ -55,7 +61,7 @@ def question_answer(request: Request, req: QARequest):
     prompt = f"""Ты — помощник по научным статьям. Твоя задача — дать короткий, точный и однозначный ответ на вопрос, используя только приведённый контекст. Нельзя продолжать диалог, нельзя задавать встречные вопросы, нельзя повторяться. Ответ должен быть строго завершён после одного абзаца.
 
     Вопрос:
-    {req.question}
+    {question}
     
     Контекст:
     {context}

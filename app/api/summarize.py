@@ -1,26 +1,10 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
+from sqlalchemy.orm import Session
 from app.models.schemas import SummarizeRequest
-from app.services.metadata_store import load_metadata
-from app.services.user_sessions import get_user_article
+from app.db.crud import get_user_arxiv_id, get_article_by_id
+from app.db.database import get_db
 
 router = APIRouter()
-
-def trim_response(raw: str) -> str:
-    """
-    Обрезаем вывод модели
-    
-    """
-    if "\n\n" in raw:
-        raw = raw.split("\n\n")[0]
-
-    cutoff_phrases = [
-        "Вопрос:", "Теперь", "Также", "Ты прав", "Давай", 
-        "Рассмотрим", "Наконец"
-    ]
-    for phrase in cutoff_phrases:
-        if phrase in raw:
-            return raw.split(phrase)[0].strip()
-    return raw.strip()
 
 
 def trim_response(raw: str) -> str:
@@ -28,7 +12,7 @@ def trim_response(raw: str) -> str:
     Обрезает генерацию модели после ключевых фраз или двойного переноса строки.
 
     args:
-        raw (str): Сырый вывод LLM
+        raw (str): Сырой вывод LLM
 
     returns:
         str: Очищенный ответ
@@ -37,7 +21,7 @@ def trim_response(raw: str) -> str:
         raw = raw.split("\n\n")[0]
 
     cutoff_phrases = [
-        "Вопрос:", "Теперь", "Также", "Ты прав", "Давай", 
+        "Вопрос:", "Теперь", "Также", "Ты прав", "Давай",
         "Рассмотрим", "Наконец"
     ]
     for phrase in cutoff_phrases:
@@ -45,40 +29,38 @@ def trim_response(raw: str) -> str:
             return raw.split(phrase)[0].strip()
     return raw.strip()
 
+
 @router.post("/")
-def summarize_article(request: Request, req: SummarizeRequest):
+def summarize_article(request: Request, req: SummarizeRequest, db: Session = Depends(get_db)):
     """
     Генерирует краткое резюме статьи по её abstract и conclusion на основе user_id.
 
     args:
         request (Request): FastAPI request (для доступа к app.state.llm)
         req (SummarizeRequest): user_id пользователя
-
+        db (Session): сессия БД через Depends
+        
     returns:
         dict: arxiv_id, title, abstract, conclusion, summary
     """
-    arxiv_id = get_user_article(req.user_id)
-    metadata = load_metadata()
-    article = metadata.get(arxiv_id)
+    arxiv_id = get_user_arxiv_id(db, req.user_id)
+    article = get_article_by_id(db, arxiv_id)
 
     if not article:
         return {"error": "Статья с таким ID не найдена."}
 
-    abstract = article.get("abstract", "")
-    conclusion = article.get("conclusion", "")
-    full_text = f"Abstract:\n{abstract}\n\nConclusion:\n{conclusion}"
+    full_text = f"Abstract:\n{article.abstract}\n\nConclusion:\n{article.conclusion}"
     prompt = f"Ты — помощник по научным статьям. Сформулируй краткое и точное резюме по тексту ниже.\n\n{full_text}\n\nКраткое резюме:"
 
     llm = request.app.state.llm
-
     response = llm(prompt, max_new_tokens=256, do_sample=False)[0]['generated_text']
     summary = response[len(prompt):].strip()
     summary = trim_response(summary)
 
     return {
         "arxiv_id": arxiv_id,
-        "title": article.get("title"),
+        "title": article.title,
         "summary": summary,
-        "abstract": abstract,
-        "conclusion": conclusion
+        "abstract": article.abstract,
+        "conclusion": article.conclusion
     }
