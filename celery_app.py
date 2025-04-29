@@ -24,7 +24,11 @@ def setup_globals(sender, **kwargs):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     quant_config = BitsAndBytesConfig(load_in_8bit=True)
     model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quant_config, device_map="auto")
-    celery_globals.llm = pipeline("text-generation", model=model, tokenizer=tokenizer)
+    celery_globals.llm = pipeline("text-generation", model=model, tokenizer=tokenizer, return_full_text=False)
+    celery_globals.terminators = list({
+        tokenizer.eos_token_id,
+        tokenizer.convert_tokens_to_ids("<|eot_id|>") or tokenizer.eos_token_id,
+    })
 
     # Embedder
     celery_globals.embedding_model = HuggingFaceBgeEmbeddings(

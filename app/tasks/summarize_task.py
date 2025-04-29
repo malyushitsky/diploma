@@ -1,29 +1,23 @@
+from typing import List
 from celery_app import celery
 from app.db.database import SessionLocal
 from app.db.crud import get_user_arxiv_id, get_article_by_id
-from app.celery_globals import llm
+from app.celery_globals import llm, terminators
 
-def trim_response(raw: str) -> str:
-    """
-    Обрезает генерацию модели после ключевых фраз или двойного переноса строки.
+SYSTEM_MSG = (
+    "Ты — помощник по научным статьям. "
+    "Сформулируй краткое и точное резюме по тексту ниже."
+)
 
-    args:
-        raw (str): Сырой вывод LLM
+def build_messages(article) -> list[dict]:
+    full_text = f"Abstract:\n{article.abstract}\n\nConclusion:\n{article.conclusion}"
 
-    returns:
-        str: Очищенный ответ
-    """
-    if "\n\n" in raw:
-        raw = raw.split("\n\n")[0]
-
-    cutoff_phrases = [
-        "Вопрос:", "Теперь", "Также", "Ты прав", "Давай",
-        "Рассмотрим", "Наконец"
+    return [
+        {"role": "system", "content": SYSTEM_MSG},
+        {"role": "user", "content": full_text},
+        {"role": "assistant", "content": "Краткое резюме:"},
     ]
-    for phrase in cutoff_phrases:
-        if phrase in raw:
-            return raw.split(phrase)[0].strip()
-    return raw.strip()
+
 
 @celery.task
 def summarize_article_task(user_id: str) -> dict:
@@ -51,10 +45,8 @@ def summarize_article_task(user_id: str) -> dict:
         full_text = f"Abstract:\n{article.abstract}\n\nConclusion:\n{article.conclusion}"
         prompt = f"""Ты — помощник по научным статьям. Сформулируй краткое и точное резюме по тексту ниже.\n\n{full_text}\n\nКраткое резюме:"""
 
-        # Генерируем ответ через LLM
-        response = llm(prompt, max_new_tokens=256, do_sample=False)[0]['generated_text']
-        summary = response[len(prompt):].strip()
-        summary = trim_response(summary)
+        messages = build_messages(article)
+        summary = llm(messages, max_new_tokens=256, do_sample=False, eos_token_id=terminators)[0]['generated_text']
 
         # Возвращаем данные
         return {

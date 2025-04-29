@@ -1,24 +1,26 @@
+from typing import List
 from celery_app import celery
 from app.db.database import SessionLocal
 from app.db.crud import get_user_arxiv_id
 from app.services.vectorstore import retrieve_and_rerank
-from app.celery_globals import llm, vectorstore, reranker  
+from app.celery_globals import llm, vectorstore, reranker, terminators
 
-def trim_response(raw: str) -> str:
-    """
-    Обрезает вывод модели
-    
-    """
-    if "\n\n" in raw:
-        raw = raw.split("\n\n")[0]
-    cutoff_phrases = [
-        "Вопрос:", "Теперь", "Также", "Ты прав", "Давай",
-        "Рассмотрим", "Наконец"
+SYSTEM_MSG = (
+    "Ты — помощник по научным статьям. "
+    "Твоя задача — дать короткий, точный и однозначный ответ на вопрос, "
+    "используя только приведённый контекст. "
+    "Нельзя продолжать диалог, задавать встречные вопросы или повторяться. "
+)
+
+def build_messages(question: str, context: str) -> List[dict]:
+    """Формирует сообщения в нужном для chat_template формате."""
+    return [
+        {"role": "system", "content": SYSTEM_MSG},
+        {"role": "user", "content": f"Вопрос:\n{question}"},
+        {"role": "system", "content": f"Контекст:\n{context}"},
     ]
-    for phrase in cutoff_phrases:
-        if phrase in raw:
-            return raw.split(phrase)[0].strip()
-    return raw.strip()
+
+
 
 @celery.task
 def ask_article_task(user_id: str, question: str) -> dict:
@@ -40,20 +42,11 @@ def ask_article_task(user_id: str, question: str) -> dict:
         top_chunks = [doc.page_content for doc, score in reranked]
         context = "\n\n".join(top_chunks)
 
+        # Используем chat_template
+        messages = build_messages(question, context)
+
         # Генерация ответа через LLM
-        prompt = f"""Ты — помощник по научным статьям. Твоя задача — дать короткий, точный и однозначный ответ на вопрос, используя только приведённый контекст. Нельзя продолжать диалог, нельзя задавать встречные вопросы, нельзя повторяться. Ответ должен быть строго завершён после одного абзаца.
-
-Вопрос:
-{question}
-
-Контекст:
-{context}
-
-Ответ:"""
-
-        response = llm(prompt, max_new_tokens=256, do_sample=False)[0]['generated_text']
-        raw = response[len(prompt):].strip()
-        answer = trim_response(raw)
+        answer = llm(messages, max_new_tokens=256, do_sample=False, eos_token_id=terminators)[0]['generated_text']
 
         return {
             "arxiv_id": arxiv_id,
