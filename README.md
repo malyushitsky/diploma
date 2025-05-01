@@ -23,10 +23,30 @@ ArxivRAG — это современная система на базе **FastAP
   - Повторная ранжировка через **BGE-Reranker v2**
   - Ответы генерируются через **LLM** [`T-Bank Lite 8B`]
 - 🧩 **Кэширование и привязка** статей к `Telegram user_id` для удобного продолжения работы
+- 🐳 **Готова к запуску через Docker Compose**
 
 ---
 
-## 📚 Как пользоваться
+## 🚀 Инструкция по локальному запуску
+
+1. Клонируйте репозиторий:
+   ```bash
+   git clone https://github.com/malyushitsky/diploma.git
+   ```
+
+2. Перейдите в директорию проекта:
+   ```bash
+   cd diploma
+   ```
+
+3. Соберите и запустите контейнеры с помощью Docker:
+   ```bash
+   docker compose up --build
+   ```
+
+---
+
+## 📚 Как пользоваться внутри ТГ бота
 
 [👉 Запустить Telegram-бота](https://t.me/ArxivRagBot)
 
@@ -41,6 +61,7 @@ ArxivRAG — это современная система на базе **FastAP
 ```text
 project-root/
 ├── app/                     # 🧩 FastAPI-приложение
+│   ├── Dockerfile           # Dockerfile для FastAPI
 │   ├── main.py              # Точка входа FastAPI
 │   ├── api/                 # Роуты API
 │   │   ├── ingest.py        # /ingest — загрузка статьи
@@ -78,14 +99,22 @@ project-root/
 │   └── database.db          # база данных со всеми метаданными
 │
 ├── tg_bot/                  # Telegram-бот на aiogram
-│   ├── __init__.py
+│   ├── Dockerfile           # Dockerfile для Telegram-бота
 │   ├── main.py              # Запуск бота
 │   ├── handlers.py          # FSM-хендлеры: /start, /ingest, /summarize, /ask
 │   ├── keyboards.py         # Клавиатура с командами
 │   ├── states.py            # Состояния FSM
-|   └── .env                 # 🔐 Токен Telegram-бота
 │
-├── requirements.txt         # 📦 Зависимости проекта
+├── .env                     # 🔐 Токен Telegram-бота
+│
+├── docker-compose.yml       # 🐳 Docker Compose
+├── Dockerfile               # Dockerfile для Celery worker (с GPU)
+│
+├── requirements/            # 📦 Зависимости по сервисам
+│   ├── requirements-fastapi.txt
+│   ├── requirements-celery.txt
+│   └── requirements-bot.txt
+│
 └── README.md                # 📘 Описание проекта
 ```
 

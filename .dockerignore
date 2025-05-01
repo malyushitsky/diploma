@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.db
+.env
+.env.*
+.vscode/
+.idea/
+tests/
+notebooks/
+*.ipynb
+articles/
+chroma_storage/
+data/

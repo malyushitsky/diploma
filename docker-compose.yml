@@ -1,0 +1,85 @@
+version: "3.9"
+
+services:
+  fastapi:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/code/app               
+      - ./data:/code/data
+      - ./articles:/code/articles
+      - ./chroma_storage:/code/chroma_storage
+      - ./celery_app.py:/code/celery_app.py
+    depends_on:
+      - redis
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/code
+
+  bot:
+    build:
+      context: .
+      dockerfile: tg_bot/Dockerfile
+    container_name: telegram_bot
+    depends_on:
+      - fastapi
+    volumes:
+      - ./tg_bot:/code/tg_bot
+    env_file:
+      - .env
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery_worker
+    command: celery -A celery_worker worker --loglevel=info --pool=solo --events
+    volumes:
+      - ./app:/code/app
+      - ./data:/code/data
+      - ./articles:/code/articles
+      - ./chroma_storage:/code/chroma_storage
+      - /c/Users/kiril/.cache/huggingface:/root/.cache/huggingface
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - fastapi
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/code
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia        
+              count: 1           
+              capabilities: [gpu]
+              
+      
+  redis:
+    image: redis:7.2
+    container_name: redis_server
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      
+  flower:
+     image: mher/flower
+     container_name: celery_flower
+     command: celery --broker=redis://redis:6379/0 flower
+     ports:
+       - "5555:5555"
+     depends_on:
+       - redis
+     environment:
+       - FLOWER_PORT=5555
+
+
+volumes:
+  redis_data:
