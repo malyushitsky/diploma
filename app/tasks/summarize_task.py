@@ -2,11 +2,11 @@ from typing import List
 from celery_app import celery
 from app.db.database import SessionLocal
 from app.db.crud import get_user_arxiv_id, get_article_by_id
-from app.celery_globals import llm, terminators
+from app.celery_globals import llm, tokenizer
 
 SYSTEM_MSG = (
     "Ты — помощник по научным статьям. "
-    "Сформулируй краткое и точное резюме по тексту ниже."
+    "Сформулируй краткое и точное резюме по тексту ниже. Отвечай строго на русском языке"
 )
 
 def build_messages(article) -> list[dict]:
@@ -41,12 +41,10 @@ def summarize_article_task(user_id: str) -> dict:
         if not article:
             return {"error": "Статья не найдена"}
 
-        # Формируем prompt
-        full_text = f"Abstract:\n{article.abstract}\n\nConclusion:\n{article.conclusion}"
-        prompt = f"""Ты — помощник по научным статьям. Сформулируй краткое и точное резюме по тексту ниже.\n\n{full_text}\n\nКраткое резюме:"""
-
+        # Используем chat_template
         messages = build_messages(article)
-        summary = llm(messages, max_new_tokens=256, do_sample=False, eos_token_id=terminators)[0]['generated_text']
+        messages = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+        summary = llm(messages, max_new_tokens=256, temperature=0.7, top_p=0.8, top_k=20, min_p=0)[0]['generated_text']
 
         # Возвращаем данные
         return {

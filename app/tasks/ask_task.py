@@ -3,13 +3,13 @@ from celery_app import celery
 from app.db.database import SessionLocal
 from app.db.crud import get_user_arxiv_id
 from app.services.vectorstore import retrieve_and_rerank
-from app.celery_globals import llm, vectorstore, reranker, terminators
+from app.celery_globals import llm, vectorstore, reranker, tokenizer
 
 SYSTEM_MSG = (
     "Ты — помощник по научным статьям. "
     "Твоя задача — дать короткий, точный и однозначный ответ на вопрос, "
     "используя только приведённый контекст. "
-    "Нельзя продолжать диалог, задавать встречные вопросы или повторяться. "
+    "Отвечай строго на русском языке"
 )
 
 def build_messages(question: str, context: str) -> List[dict]:
@@ -44,9 +44,10 @@ def ask_article_task(user_id: str, question: str) -> dict:
 
         # Используем chat_template
         messages = build_messages(question, context)
+        messages = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
 
         # Генерация ответа через LLM
-        answer = llm(messages, max_new_tokens=256, do_sample=False, eos_token_id=terminators)[0]['generated_text']
+        answer = llm(messages, max_new_tokens=256, temperature=0.7, top_p=0.8, top_k=20, min_p=0)[0]['generated_text']
 
         return {
             "arxiv_id": arxiv_id,
