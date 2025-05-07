@@ -6,5 +6,5 @@ router = APIRouter()
 
 @router.post("/")
 def ingest_async(req: IngestRequest):
-    task = ingest_article_task.delay(req.user_id, req.arxiv_url)
+    task = ingest_article_task.delay(req.user_id, req.source, req.is_pdf)
     return {"message": "Задача парсинга и загрузки метаданных в БД отправлена в очередь задач", "task_id": task.id}

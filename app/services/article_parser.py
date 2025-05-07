@@ -3,6 +3,8 @@ import requests
 from typing import Optional, List, Tuple
 import arxiv
 import pymupdf4llm
+import fitz
+import hashlib
 
 def extract_arxiv_id(url: str) -> str:
     """
@@ -140,22 +142,60 @@ def extract_section(md_text: str, section: str, aliases: Optional[List[str]] = N
     section_lines = lines[start_idx:end_idx] if end_idx else lines[start_idx:]
     return "\n".join(section_lines).strip()
 
-def parse_and_split_article(arxiv_url: str) -> Tuple[str, str, str, List]:
+def extract_title_from_pdf(pdf_path: str) -> str:
     """
-    Загружает статью по ссылке arXiv, парсит её, очищает и разбивает на чанки.
+    Извлекает заголовок статьи из первой страницы PDF,
+    предполагая, что самая крупная строка — это заголовок.
+    """
+    doc = fitz.open(pdf_path)
+    doc
+    first_page = doc[0]
+    blocks = first_page.get_text("dict")["blocks"]
+
+    candidate_titles = []
+    for block in blocks:
+        if "lines" not in block:
+            continue
+        for line in block["lines"]:
+            line_text = " ".join([span["text"] for span in line["spans"] if span["text"].strip()])
+            if line_text:
+                max_size = max(span["size"] for span in line["spans"])
+                candidate_titles.append((line_text.strip(), max_size))
+
+    doc.close()
+
+    if candidate_titles:
+        candidate_titles.sort(key=lambda x: -x[1])  # по убыванию размера шрифта
+        return ' '.join([x for x, size in candidate_titles if size == candidate_titles[0][1]])
+
+
+def parse_and_split_article(source: str, is_pdf: bool = False) -> Tuple[str, str, str, str, str]:
+    """
+    Загружает и парсит статью либо по ссылке, либо из PDF.
 
     Returns:
-        arxiv_id (str): ID статьи с arxiv.org
+        arxiv_id (str): либо настоящий arxiv_id, либо сгенерированный из title/hash
         title (str): Название статьи
+        md_cleaned (str): Markdown статья для векторизации
         abstract (str): Извлечённый текст из раздела Abstract
         conclusion (str): Извлечённый текст из раздела Conclusion
+        pdf_path (str): Путь к PDF
     """
-    arxiv_id = extract_arxiv_id(arxiv_url)
-    pdf_path, title = download_pdf(arxiv_id, save_path=f"articles/{arxiv_id}.pdf")
-    md_raw = pymupdf4llm.to_markdown(pdf_path)
+    if is_pdf:
+        md_raw = pymupdf4llm.to_markdown(source)
+
+        title = extract_title_from_pdf(source)
+        arxiv_id = hashlib.sha1(title.encode()).hexdigest()[:8]
+
+    else:
+        arxiv_id = extract_arxiv_id(source)
+        pdf_path, title = download_pdf(arxiv_id, save_path=f"articles/{arxiv_id}.pdf")
+        md_raw = pymupdf4llm.to_markdown(pdf_path)
+
     md_trimmed = trim_markdown_after_section(md_raw)
     md_cleaned = clean_markdown_for_rag(md_trimmed)
     abstract = extract_section(md_cleaned, "abstract", ["absctract", "summary"])
     conclusion = extract_section(md_cleaned, "conclusion", ["conclusions", "closing remarks"])
 
     return arxiv_id, title, md_cleaned, abstract, conclusion
+

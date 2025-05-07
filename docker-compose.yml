@@ -29,6 +29,7 @@ services:
       - fastapi
     volumes:
       - ./tg_bot:/code/tg_bot
+      - ./articles:/code/articles
     env_file:
       - .env
 

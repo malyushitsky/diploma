@@ -3,8 +3,8 @@ from pydantic import BaseModel
 
 class IngestRequest(BaseModel):
     user_id: str
-    arxiv_url: str
-
+    source:str
+    is_pdf: bool
 
 class QARequest(BaseModel):
     user_id: str

@@ -14,44 +14,38 @@ from app.db.crud import (
 router = APIRouter()
 
 @celery.task
-def ingest_article_task(user_id: str, arxiv_url: str):
+def ingest_article_task(user_id: str, source: str, is_pdf: bool = False) -> dict:
     """
-    Фоновая задача: загружает и обрабатывает статью с arXiv,
-    сохраняет чанки в ChromaDB, метаданные в БД и привязывает к пользователю.
+    Загружает и обрабатывает статью (по ссылке или PDF).
 
-    args:
-        user_id (str): Telegram user ID
-        arxiv_url (str): ссылка на статью
-    returns:
-        dict: результат обработки
+    Args:
+        user_id (str): Telegram user_id
+        source (str): либо arXiv-ссылка, либо путь к PDF
+        is_pdf (bool): True, если это PDF-файл, False — если ссылка
     """
     db = SessionLocal()
 
     try:
-        arxiv_id = extract_arxiv_id(arxiv_url)
-        
+        arxiv_id, title, md_cleaned, abstract, conclusion = parse_and_split_article(source, is_pdf)
+
         if get_article_by_id(db, arxiv_id):
             register_user_session(db, user_id, arxiv_id)
             return {
-                "message": "Статья уже есть в БД, сессия пользователя обновлена",
+                "message": f"Статья уже загружена ранее. Привязана к вашему профилю.",
                 "arxiv_id": arxiv_id,
                 "skipped": True
             }
-    
-        arxiv_id, title, md_cleaned, abstract, conclusion = parse_and_split_article(arxiv_url)
-    
+
         chunks = store_chunks(md_cleaned, arxiv_id, title, embedding_model)
-    
-        # Сохраняем метаданные и сессию
         save_article_metadata(db, arxiv_id, title, abstract, conclusion)
         register_user_session(db, user_id, arxiv_id)
-    
+
         return {
-            "message": "Статья обработана успешно",
+            "message": f"Статья '{title}' обработана успешно",
             "arxiv_id": arxiv_id,
             "title": title,
             "num_chunks": len(chunks)
         }
-        
+
     finally:
         db.close()

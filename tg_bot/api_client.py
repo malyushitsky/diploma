@@ -21,8 +21,8 @@ def summarize_async(user_id: str):
     res = requests.post(f"{FASTAPI_URL}/summarize_async", json={"user_id": user_id})
     return res.json()
 
-def ingest_async(user_id: str, url: str):
-    res = requests.post(f"{FASTAPI_URL}/ingest_async", json={"user_id": user_id, "arxiv_url": url})
+def ingest_async(user_id: str, source: str, is_pdf: bool):
+    res = requests.post(f"{FASTAPI_URL}/ingest_async", json={"user_id": user_id, "source": source, 'is_pdf': is_pdf})
     return res.json()
 
 def get_task_result(task_id: str):

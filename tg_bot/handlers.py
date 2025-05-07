@@ -11,35 +11,42 @@ router = Router()
 
 @router.message(F.text.lower() == "/start")
 async def start_handler(msg: Message, state: FSMContext):
-    await msg.answer("👋 Привет! Я помогу тебе работать с научными статьями. Для начала нужно загрузить интересуюзщую тебя статью с arXiv.org. Для навигации по боту используй внутреннее меню:", reply_markup=main_menu_keyboard())
+    await msg.answer("👋 Привет! Я помогу тебе работать с научными статьями. Для начала нужно загрузить интересующую тебя статью. Для навигации по боту используй внутреннее меню:", reply_markup=main_menu_keyboard())
     await state.set_state(ArticleStates.choosing_action)
 
 @router.message(F.text.lower() == "⬇️ загрузить статью")
 async def ingest_prompt(msg: Message, state: FSMContext):
-    await msg.answer("🔗 Отправь ссылку на статью с arXiv:")
+    await msg.answer("🔗 Отправь ссылку на статью с arXiv или прикрепи файл со статьей в формате PDF")
     await state.set_state(ArticleStates.entering_url)
 
 @router.message(ArticleStates.entering_url)
-async def ingest_article_handler(msg: Message, state: FSMContext):
+async def ingest_article_handler(msg: Message, state: FSMContext, bot: Bot):
     user_id = str(msg.from_user.id)
     wait_msg = await msg.answer("📥 Загружаю и обрабатываю статью, подождите немного...")
 
-    task_info = ingest_async(user_id, msg.text)
+    # Если PDF-файл — сохраняем
+    if msg.document and msg.document.mime_type == "application/pdf":
+        file_info = await bot.get_file(msg.document.file_id)
+        file_path = f"articles/{file_info.file_unique_id}.pdf"
+        await bot.download_file(file_info.file_path, destination=file_path)
+        task_info = ingest_async(user_id=user_id, source=file_path, is_pdf=True)
+
+    # Если ссылка
+    else:
+        task_info = ingest_async(user_id=user_id, source=msg.text, is_pdf=False)
+
     task_id = task_info["task_id"]
 
-    # Пуллинг результата
     while True:
         await asyncio.sleep(2)
         status_info = get_task_result(task_id)
-
         if status_info["status"] == "completed":
-            result = status_info["result"]
             await wait_msg.delete()
-            await msg.answer(f"✅ {result.get('message')}")
+            await msg.answer(f"✅ {status_info['result']['message']}")
             break
         elif status_info["status"] == "failed":
             await wait_msg.delete()
-            await msg.answer(f"❌ Ошибка при загрузке: {status_info['error']}")
+            await msg.answer(f"❌ Ошибка: {status_info['error']}")
             break
 
     await state.set_state(ArticleStates.choosing_action)
