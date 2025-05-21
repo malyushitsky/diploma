@@ -18,3 +18,4 @@ chromadb==0.6.3
 scikit-learn==1.6.1
 tenacity==9.0.0
 SQLAlchemy==2.0.39
+hf_xet
